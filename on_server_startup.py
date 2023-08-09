@@ -29,11 +29,11 @@ async def add_days_of_week() -> None:
 
 async def add_stores_data(root_dir: os.PathLike) -> None:
     # opening closing data csv -> df
-    menu_file_path = os.path.join(root_dir, "Menu hours.csv")
+    menu_file_path = os.path.join(root_dir, "csv_data", "Menu hours.csv")
     menu_file_df = pd.read_csv(menu_file_path)
     # Time Zones csv -> df
     bq_file_path = os.path.join(
-        root_dir, "bq-results-20230125-202210-1674678181880.csv"
+        root_dir, "csv_data", "bq-results-20230125-202210-1674678181880.csv"
     )
     bq_file_df = pd.read_csv(bq_file_path)
 
@@ -73,57 +73,74 @@ async def add_stores_data(root_dir: os.PathLike) -> None:
 
 
 async def add_business_hours(root_dir: os.PathLike):
-    menu_file_path = os.path.join(root_dir, "Menu hours.csv")
+    menu_file_path = os.path.join(root_dir, "csv_data", "Menu hours.csv")
     menu_file_df = pd.read_csv(menu_file_path)
-    id_in_menu_file = list(map(str, menu_file_df['store_id'].unique()))
+    id_in_menu_file = list(map(str, menu_file_df["store_id"].unique()))
 
     async with get_connection() as conn:
         async with conn.transaction():
             query_for_store_id = f"SELECT id,store_id FROM stores WHERE store_id IN ({','.join(id_in_menu_file)});"
             result = await conn.fetch(query_for_store_id)
-            map_id = {int(record['store_id']):record['id'] for record in result}
+            map_id = {int(record["store_id"]): record["id"] for record in result}
 
-            menu_file_df['store_id'] = menu_file_df['store_id'].map(map_id)
+            menu_file_df["store_id"] = menu_file_df["store_id"].map(map_id)
 
             query_for_days_id = f"SELECT id, day_number FROM days_of_week"
-            map_days_to_Number = {record['day_number']: record['id'] for record in await conn.fetch(query_for_days_id)}
+            map_days_to_Number = {
+                record["day_number"]: record["id"]
+                for record in await conn.fetch(query_for_days_id)
+            }
 
-            menu_file_df['day'] = menu_file_df['day'].map(map_days_to_Number)
+            menu_file_df["day"] = menu_file_df["day"].map(map_days_to_Number)
 
-
-
-
-            menu_file_df['start_time_local'] = pd.to_datetime(menu_file_df['start_time_local'], format='%H:%M:%S')
-            menu_file_df['end_time_local'] = pd.to_datetime(menu_file_df['end_time_local'], format='%H:%M:%S')
+            menu_file_df["start_time_local"] = pd.to_datetime(
+                menu_file_df["start_time_local"], format="%H:%M:%S"
+            )
+            menu_file_df["end_time_local"] = pd.to_datetime(
+                menu_file_df["end_time_local"], format="%H:%M:%S"
+            )
 
             data = menu_file_df.values.tolist()
-            insert_query =f"""INSERT INTO business_hours (  store_id, 
+            insert_query = f"""INSERT INTO business_hours (  store_id, 
                                                             day_of_week_id, 
-                                                            bussiness_start_time,   
-                                                            bussiness_end_time) 
+                                                            business_start_time,   
+                                                            business_end_time) 
                                                             SELECT $1, $2, $3::time, $4::time
                                                             WHERE NOT EXISTS (
                                                             SELECT 1 FROM business_hours
                                                             WHERE store_id = $1 AND day_of_week_id = $2) """
 
-
             await conn.executemany(insert_query, data)
-              
-async def update_store_status(root_path:os.PathLike) ->None:
+
+
+async def update_store_status(root_path: os.PathLike) -> None:
     """
     Updates the status of the stores in the database\n
     returns None
     """
-    status_csv = pd.read_csv(os.path.join(root_path,"store status.csv"))
-    status_csv['timestamp_utc'] = status_csv['timestamp_utc'].astype(str)
+    status_csv = pd.read_csv(os.path.join(root_path, "csv_data", "store status.csv"))
+    status_csv["timestamp_utc"] = status_csv["timestamp_utc"].astype(str)
+    status_csv["timestamp_utc"] = pd.to_datetime(status_csv["timestamp_utc"])
+
     status_records_list = status_csv.to_records(index=False).tolist()
 
     print("adding store status to database")
     async with get_connection() as conn:
         async with conn.transaction():
-            await conn.copy_records_to_table('store_status', records=status_records_list, columns=['store_id','status','timestamp_utc'])
-       
-
+            # Create temporary table
+            await conn.execute(
+                "CREATE TEMPORARY TABLE temp_store_status (id SERIAL PRIMARY KEY, store_id NUMERIC, status TEXT, timestamp_utc TIMESTAMP WITH TIME ZONE)"
+            )
+            # copy records to temp table
+            await conn.copy_records_to_table(
+                "temp_store_status",
+                records=status_records_list,
+                columns=["store_id", "status", "timestamp_utc"],
+            )
+            # move records to main table wiith on conflict clause
+            await conn.execute(
+                f"INSERT INTO store_status SELECT * FROM temp_store_status ON CONFLICT DO NOTHING"
+            )
 
 
 async def check_if_table_empty(table_name: str) -> bool:
@@ -171,16 +188,11 @@ async def on_startup() -> None:
     await update_store_status(root_dir)
 
     # Fill business_hours table
-    # await add_business_hours(root_dir) @TODO uncomment (takes too long)
+    await add_business_hours(root_dir)
+    #  @TODO uncomment (takes too long)
 
     stores_is_empty = await check_if_table_empty("stores")
-
-    # if stores_is_empty:
-    #     for store_id, day, start_time, end_time in zip(business_hours_df['store_id'], business_hours_df['day'], business_hours_df['start_time_local'], business_hours_df['end_time_local']):
-    #         print(f"Store ID: {store_id}, Day: {day}, Start Time: {start_time}, End Time: {end_time}")
 
     business_hours_is_empty = await check_if_table_empty("business_hours")
     print(f"stores is empty {stores_is_empty}")
     print(f"business hours is empty {business_hours_is_empty}")
-
-    # with open(os.path.join(root_dir,"bq-results-20230125-202210-1674678181880.csv"),'r') as store_timezone:

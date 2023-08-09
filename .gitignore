@@ -6,3 +6,4 @@ z.py
 .venv
 store status.csv
 store status.csv:Zone.Identifier
+csv_data/*

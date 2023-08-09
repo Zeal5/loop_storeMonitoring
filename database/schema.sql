@@ -17,15 +17,15 @@ CREATE TABLE IF NOT EXISTS business_hours (
     id BIGSERIAL PRIMARY KEY,
     store_id INTEGER REFERENCES stores(id),
     day_of_week_id INTEGER REFERENCES days_of_week(id),
-    bussiness_start_time TIME,
-    bussiness_end_time TIME
+    business_start_time TIME,
+    business_end_time TIME
 );
 
 CREATE TABLE IF NOT EXISTS store_status (
     id BIGSERIAL PRIMARY KEY,
     store_id NUMERIC NOT NULL ,
     status VARCHAR(10) NOT NULL ,
-    timestamp_utc VARCHAR(50) NOT NULL
+    timestamp_utc TIMESTAMP WITh TIME ZONE
 );
 
 

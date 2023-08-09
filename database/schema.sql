@@ -21,4 +21,12 @@ CREATE TABLE IF NOT EXISTS business_hours (
     bussiness_end_time TIME
 );
 
+CREATE TABLE IF NOT EXISTS store_status (
+    id BIGSERIAL PRIMARY KEY,
+    store_id NUMERIC NOT NULL ,
+    status VARCHAR(10) NOT NULL ,
+    timestamp_utc VARCHAR(50) NOT NULL
+);
+
+
 END;

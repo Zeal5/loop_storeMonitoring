@@ -109,7 +109,20 @@ async def add_business_hours(root_dir: os.PathLike):
 
             await conn.executemany(insert_query, data)
               
+async def update_store_status(root_path:os.PathLike) ->None:
+    """
+    Updates the status of the stores in the database\n
+    returns None
+    """
+    status_csv = pd.read_csv(os.path.join(root_path,"store status.csv"))
+    status_csv['timestamp_utc'] = status_csv['timestamp_utc'].astype(str)
+    status_records_list = status_csv.to_records(index=False).tolist()
 
+    print("adding store status to database")
+    async with get_connection() as conn:
+        async with conn.transaction():
+            await conn.copy_records_to_table('store_status', records=status_records_list, columns=['store_id','status','timestamp_utc'])
+       
 
 
 
@@ -154,6 +167,8 @@ async def on_startup() -> None:
 
     # Fill out stores table
     await add_stores_data(root_dir)
+
+    await update_store_status(root_dir)
 
     # Fill business_hours table
     # await add_business_hours(root_dir) @TODO uncomment (takes too long)

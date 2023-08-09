@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 # Create the connection pool
 pool = None
 
+
 async def create_pool():
     hostname = "192.168.56.1"
     database_name = "loop"
@@ -20,10 +21,12 @@ async def create_pool():
         password=password,
     )
 
+
 async def close_pool():
     global pool
     if pool is not None:
         await pool.close()
+
 
 @asynccontextmanager
 async def get_connection():
@@ -40,6 +43,7 @@ async def get_connection():
     finally:
         if conn is not None:
             await pool.release(conn)  # Release the connection back to the pool
+
 
 # Make sure to close the pool when your application shuts down
 async def on_shutdown():

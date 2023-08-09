@@ -5,3 +5,4 @@ bq-results-20230125-202210-1674678181880.csv
 z.py
 .venv
 store status.csv
+store status.csv:Zone.Identifier

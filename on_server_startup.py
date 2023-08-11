@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 from database.connections import get_connection
-
+from datetime import datetime
 
 async def add_days_of_week() -> None:
     """
@@ -75,23 +75,10 @@ async def add_stores_data(root_dir: os.PathLike) -> None:
 async def add_business_hours(root_dir: os.PathLike):
     menu_file_path = os.path.join(root_dir, "csv_data", "Menu hours.csv")
     menu_file_df = pd.read_csv(menu_file_path)
-    id_in_menu_file = list(map(str, menu_file_df["store_id"].unique()))
+    # id_in_menu_file = list(map(str, menu_file_df["store_id"].unique()))
 
     async with get_connection() as conn:
         async with conn.transaction():
-            query_for_store_id = f"SELECT id,store_id FROM stores WHERE store_id IN ({','.join(id_in_menu_file)});"
-            result = await conn.fetch(query_for_store_id)
-            map_id = {int(record["store_id"]): record["id"] for record in result}
-
-            menu_file_df["store_id"] = menu_file_df["store_id"].map(map_id)
-
-            query_for_days_id = f"SELECT id, day_number FROM days_of_week"
-            map_days_to_Number = {
-                record["day_number"]: record["id"]
-                for record in await conn.fetch(query_for_days_id)
-            }
-
-            menu_file_df["day"] = menu_file_df["day"].map(map_days_to_Number)
 
             menu_file_df["start_time_local"] = pd.to_datetime(
                 menu_file_df["start_time_local"], format="%H:%M:%S"
@@ -101,6 +88,8 @@ async def add_business_hours(root_dir: os.PathLike):
             )
 
             data = menu_file_df.values.tolist()
+            # print(data)
+        
             insert_query = f"""INSERT INTO business_hours (  store_id, 
                                                             day_of_week_id, 
                                                             business_start_time,   
@@ -108,7 +97,7 @@ async def add_business_hours(root_dir: os.PathLike):
                                                             SELECT $1, $2, $3::time, $4::time
                                                             WHERE NOT EXISTS (
                                                             SELECT 1 FROM business_hours
-                                                            WHERE store_id = $1 AND day_of_week_id = $2) """
+                                                            WHERE store_id = $1 AND day_of_week_id = $2 AND business_start_time = $3 AND business_end_time = $4) """
 
             await conn.executemany(insert_query, data)
 
@@ -118,29 +107,14 @@ async def update_store_status(root_path: os.PathLike) -> None:
     Updates the status of the stores in the database\n
     returns None
     """
-    status_csv = pd.read_csv(os.path.join(root_path, "csv_data", "store status.csv"))
-    status_csv["timestamp_utc"] = status_csv["timestamp_utc"].astype(str)
-    status_csv["timestamp_utc"] = pd.to_datetime(status_csv["timestamp_utc"])
-
-    status_records_list = status_csv.to_records(index=False).tolist()
+    status_csv = pd.read_csv(os.path.join(root_path, "csv_data", "store status.csv"), parse_dates=['timestamp_utc'])
+    status_csv['timestamp_utc'] = pd.to_datetime(status_csv['timestamp_utc']).dt.tz_convert(None)
+    values = status_csv.values.tolist()
 
     print("adding store status to database")
     async with get_connection() as conn:
         async with conn.transaction():
-            # Create temporary table
-            await conn.execute(
-                "CREATE TEMPORARY TABLE temp_store_status (id SERIAL PRIMARY KEY, store_id NUMERIC, status TEXT, timestamp_utc TIMESTAMP WITH TIME ZONE)"
-            )
-            # copy records to temp table
-            await conn.copy_records_to_table(
-                "temp_store_status",
-                records=status_records_list,
-                columns=["store_id", "status", "timestamp_utc"],
-            )
-            # move records to main table wiith on conflict clause
-            await conn.execute(
-                f"INSERT INTO store_status SELECT * FROM temp_store_status ON CONFLICT DO NOTHING"
-            )
+            await conn.executemany("INSERT INTO store_status (store_id, status, timestamp_utc) VALUES ($1, $2, $3)",values)
 
 
 async def check_if_table_empty(table_name: str) -> bool:
@@ -165,6 +139,7 @@ async def create_tables(root_dir: os.PathLike) -> None:
             async with conn.transaction():
                 await conn.execute(schemas)
                 print("All Tables created successfully")
+
 
 
 async def on_startup() -> None:

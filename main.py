@@ -10,10 +10,10 @@ app = FastAPI()
 
 @app.on_event("startup")
 async def startup_event():
-    await on_startup()
-    # pass
-
-
+    # await on_startup()
+    await report()
+    
+"""
 @app.get("/trigger_report")
 async def trigger_report(background_tasks: BackgroundTasks):
     background_tasks.add_task(report)
@@ -26,3 +26,4 @@ async def trigger_report(background_tasks: BackgroundTasks):
 async def get_report(report_id: int):
     cached_value = cache.get("report_status")
     return cached_value
+"""

@@ -1,5 +1,5 @@
 from collections import defaultdict
-import pytz
+from pytz import timezone
 from datetime import datetime, time, timedelta
 from dateutil import tz
 import pandas as pd
@@ -7,24 +7,57 @@ import pandas as pd
 
 class Report:
     def __init__(
-        self, timezone: str, store_business_hours: pd.DataFrame, polls: pd.DataFrame
+        self, _timezone: str, store_business_hours: pd.DataFrame, polls: pd.DataFrame
     ):
-        self.timezone = timezone
+        self.timezone = _timezone
         self.store_business_hours = store_business_hours
-        # polls['timestamp_utc'] = polls['timestamp_utc'].dt.tz_convert(self.timezone)
-
+        # convert time from utc time to local time
+        polls['timestamp_local'] = pd.to_datetime(polls['timestamp_utc']).dt.tz_localize('UTC').dt.tz_convert(self.timezone)
+        # drop timestamp_utc column
+        self.polls = polls.drop(columns= ['timestamp_utc'])    
+        # add date col 
+        self.polls['date_col'] = self.polls['timestamp_local'].dt.date
         self.business_hours: dict[int:(time, time)] = self.get_business_hours_dict()
-        print(polls)
-        print(self.business_hours)
-        # for row, data in self.polls.iterrows():  # loop over the polling df
-        #     for time_slot in self.business_hours[
-        #         data["day"]
-        #     ]:  # loop over the business_hours dict
-                # print(
-                #     f"start time : {time_slot[0]}---poll {data['timestamp_utc']}---end time : {time_slot[1]}"
-                # )
-        #         if time_slot[0] < data['time']  < time_slot[1] :
-        #             print('yes')
+        # print(self.polls)
+        # print(self.business_hours)
+        active_hours_dict = {}
+        last_ping = {}
+        business_hours_count = []
+        for row, data in self.polls.iterrows():  # loop over the polling df
+            for time_slot in self.business_hours[data["day"]]:  
+                start_time = timezone(self.timezone).localize(time_slot[0].replace(
+                    year=data["date_col"].year,
+                    month=data["date_col"].month,
+                    day=data["date_col"].day,
+                ))
+                end_time = timezone(self.timezone).localize(time_slot[1].replace(
+                    year=data["date_col"].year,
+                    month=data["date_col"].month,
+                    day=data["date_col"].day,
+                ))
+                # print(f"start time : {start_time}---poll {data['timestamp_local']}---end time : {end_time}")
+                key = f"{data['date_col'].day}-{data['date_col'].month}"
+                if key not in active_hours_dict:
+                    active_hours_dict[key] = {'active': 0, 'inactive': 0}
+                if f'{start_time}-{end_time}' not in business_hours_count:
+                    active_hours_dict[key]['active'] += (end_time - start_time).total_seconds() / 3600
+                    business_hours_count.append(f'{start_time}-{end_time}')
+                    # print(business_hours_count)
+                    # print(active_hours_dict)
+
+
+                if start_time <= data['timestamp_local']  <= end_time:
+                    print(last_ping)
+                    if data['status'] == 'inactive':
+                        active_hours_dict[key]['inactive'] += (data['timestamp_local'] - (last_ping[f"{data['date_col'].day}-{data['date_col'].month}"] if last_ping else start_time)).total_seconds() / 3600
+                        active_hours_dict[key]['active'] -= (data['timestamp_local'] -  (last_ping[f"{data['date_col'].day}-{data['date_col'].month}"] if last_ping else start_time)).total_seconds() / 3600
+                        pass
+
+                    last_ping[f"{data['date_col'].day}-{data['date_col'].month}"] = data['timestamp_local']
+                    print(active_hours_dict)
+
+
+                        
 
     def get_business_hours_dict(self) -> dict[int:(time, time)]:
         open_hours_in_day_map: dict[list] = defaultdict(list)
@@ -37,12 +70,3 @@ class Report:
 
         return open_hours_in_day_map
 
-    # def get_active_hours(self):
-    #     print(self.polls)
-
-    def p(self):
-        print(f"time zones for stores : {self.timezone}")
-        print(f"store status during day \n{self.polls}")
-        print("..................................................")
-        print(f"store business hours \n{self.store_business_hours}")
-        print("..................................................")

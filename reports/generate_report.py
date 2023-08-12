@@ -23,7 +23,7 @@ async def report():
     df = pd.DataFrame(await get_df())
     df.columns = ["id", "store_id", "status", "timestamp_utc"]
     store_ids_list = (int(i) for i in df["store_id"].unique().tolist())
-    for store_id in store_ids_list:
+    for store_id in store_ids_list: # @TODO this way only checks all stores in store_id list check if there are any other stores from other 2 csv file
         newdf = df[df["store_id"] == store_id]
         await calculate_time(newdf, store_id)
     cache["report_status"] = "complete"

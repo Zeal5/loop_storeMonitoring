@@ -114,7 +114,7 @@ async def update_store_status(root_path: os.PathLike) -> None:
     print("adding store status to database")
     async with get_connection() as conn:
         async with conn.transaction():
-            await conn.executemany("INSERT INTO store_status (store_id, status, timestamp_utc) VALUES ($1, $2, $3)",values)
+            await conn.executemany("INSERT INTO store_status (store_id, status, timestamp_utc) VALUES ($1, $2, $3) ON CONFLICT (store_id, status, timestamp_utc) DO NOTHING",values)
 
 
 async def check_if_table_empty(table_name: str) -> bool:

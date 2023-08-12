@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS store_status (
     id BIGSERIAL PRIMARY KEY,
     store_id NUMERIC NOT NULL ,
     status VARCHAR(10) NOT NULL ,
-    timestamp_utc timestamp 
+    timestamp_utc timestamp,
+    CONSTRAINT unique_store_status UNIQUE (store_id, status, timestamp_utc)
 );
 
 

@@ -5,15 +5,16 @@ from reports.generate_report import report
 from reports.report_status import cache
 
 app = FastAPI()
- 
 
+# all the csv files  should be in the same directory under csv_data in root directory
 
 
 @app.on_event("startup")
 async def startup_event():
+    """Run on startup and add all data to db avoiding duplications."""
+
     await on_startup()
     print("startup complete")
-    
 
 
 @app.get("/trigger_report")
@@ -28,14 +29,17 @@ async def get_report(report_id: int):
     cached_value = cache.get("report_status")
     async with get_connection() as conn:
         async with conn.transaction():
-            hourly_result = await conn.fetch("SELECT * FROM last_hour_activity WHERE store_id = $1", report_id)
+            hourly_result = await conn.fetch(
+                "SELECT * FROM last_hour_activity WHERE store_id = $1", report_id
+            )
             if hourly_result:
-                daily_result = await conn.fetch("SELECT * FROM last_day_activity WHERE store_id = $1", report_id)
-                weekly_result = await conn.fetch("SELECT * FROM last_week_activity WHERE store_id = $1", report_id)
-                result = f"""{report_id},{hourly_result[0]['active_time']},{daily_result[0]['active_time']},{weekly_result[0]['active_time']},{hourly_result[0]['inactive_time']},{daily_result[0]['inactive_time']},{weekly_result[0]['inactive_time']}"""                                                 
+                daily_result = await conn.fetch(
+                    "SELECT * FROM last_day_activity WHERE store_id = $1", report_id
+                )
+                weekly_result = await conn.fetch(
+                    "SELECT * FROM last_week_activity WHERE store_id = $1", report_id
+                )
+                result = f"""{report_id},{hourly_result[0]['active_time']},{daily_result[0]['active_time']},{weekly_result[0]['active_time']},{hourly_result[0]['inactive_time']},{daily_result[0]['inactive_time']},{weekly_result[0]['inactive_time']}"""
                 return result
             else:
                 return {"message": cached_value}
-
-
-
